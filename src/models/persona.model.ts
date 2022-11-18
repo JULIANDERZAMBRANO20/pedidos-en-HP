@@ -1,4 +1,4 @@
-import {Entity, model, property, hasMany} from '@loopback/repository';
+import {Entity, hasMany, model, property} from '@loopback/repository';
 import {Pedido} from './pedido.model';
 
 @model({settings: {strict: false}})
@@ -36,7 +36,8 @@ export class Persona extends Entity {
 
   @property({
     type: 'string',
-    required: true,
+    //required: true,  FUNCIONBA ESTA PERO SE COMENTA PARA HACER PRUEBAS EN EL POSTMAN EN FORMATO JSON
+    required: false,
   })
   clave: string;
 

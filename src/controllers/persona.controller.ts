@@ -1,30 +1,59 @@
+import {service} from '@loopback/core';
 import {
   Count,
   CountSchema,
   Filter,
   FilterExcludingWhere,
   repository,
-  Where,
+  Where
 } from '@loopback/repository';
 import {
-  post,
-  param,
-  get,
-  getModelSchemaRef,
-  patch,
-  put,
-  del,
-  requestBody,
-  response,
+  del, get,
+  getModelSchemaRef, HttpErrors, param, patch, post, put, requestBody,
+  response
 } from '@loopback/rest';
-import {Persona} from '../models';
+import {Llaves} from '../config/llaves'; // SE IMPORTÓ PARA INYECTAR LA URL EN EL FETCH UBICADO EN EL METODO POST
+import {Credenciales, Persona} from '../models';
 import {PersonaRepository} from '../repositories';
+import {AutenticacionService} from '../services';
+const fetch = require("node-fetch");  // SE IMPORTA PARA LAS NOTIFICACIONES
+
 
 export class PersonaController {
   constructor(
     @repository(PersonaRepository)
-    public personaRepository : PersonaRepository,
-  ) {}
+    public personaRepository: PersonaRepository,
+    @service(AutenticacionService)   // SE IMPORTÓ PARA LA AUTETINCACION -> AQUI SE INSTANCIA LA CARPETA SERVICIOS-> AUTETICACION SERVICIOS
+    public servicioAutenticacion: AutenticacionService
+
+  ) { }
+
+  @post("/identificadorPersona", {
+    responses: {
+      "200": {
+        description: "Identificacion de usuarios"
+      }
+    }
+  })
+  async identificadorPersona(
+    @requestBody() Credenciales: Credenciales
+  ) {
+    let p = await this.servicioAutenticacion.IdentificacionPersona(Credenciales.usuario, Credenciales.clave);
+    if (p) {
+      let token = this.servicioAutenticacion.GenerarTokenJWT(p);
+      return {
+        datos: {
+          nombres: p.nombre,
+          correo: p.correo,
+          id: p.id
+        },
+        tk: token
+      }
+    } else {
+      throw new HttpErrors[401]("Datos invalidos");
+    }
+
+  }
 
   @post('/personas')
   @response(200, {
@@ -44,7 +73,34 @@ export class PersonaController {
     })
     persona: Omit<Persona, 'id'>,
   ): Promise<Persona> {
-    return this.personaRepository.create(persona);
+
+    // AUTETUCACION
+    console.log("Empieza autenticacion");
+    let clave = this.servicioAutenticacion.GeneradorClave();  // SE LLAMA EL METODO GENERAODR CLAVE
+    console.log("Se ha generado clave");
+    let claveCifrada = this.servicioAutenticacion.CifrarClave(clave); // SE LLAMA EL METODO CIFRAR CLAVE
+    persona.clave = claveCifrada;
+    console.log("Se ha generado clave CIFRADA" + claveCifrada);
+    let p = await this.personaRepository.create(persona);  // se reemplazo el RETURN por un AWAIT y se añadio en una variable P
+    console.log("HASTA AQUI AUTENTICACION");
+
+    // NOTIFICACION AL USUARIO
+
+    let destino = persona.correo;
+    console.log("Destino");
+    let asunto = 'registro en la plataforma';
+    console.log("Asunto");
+    let contenido = `Hola ${persona.nombre}, su nombre de usuario es ${persona.correo}, y sucontraseña es ${clave} `;
+    console.log("CONTENIDO");
+    //fetch(`http://127.0.0.1:5000/envio-correo?correo_destino=${destino}&asunto=${asunto}&contenido=${contenido}`)  ANTES DE INYECTAR LA URL
+    fetch(`${Llaves.UrlServiceNotificaciones}/envio-correo?correo_destino=${destino}&asunto=${asunto}&contenido=${contenido}`)
+      //console.log("URL");
+      .then((data: any) => {
+        console.log(data);
+      })
+    return p;
+
+
   }
 
   @get('/personas/count')
@@ -148,3 +204,7 @@ export class PersonaController {
     await this.personaRepository.deleteById(id);
   }
 }
+function then(arg0: (data: any) => void) {
+  throw new Error('Function not implemented.');
+}
+
